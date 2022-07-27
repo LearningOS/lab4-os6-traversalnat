@@ -1,16 +1,16 @@
 //! Process management syscalls
 
-use crate::mm::{translated_refmut, translated_ref, translated_str};
+use crate::config::MAX_SYSCALL_NUM;
+use crate::fs::{open_file, OpenFlags};
+use crate::mm::{translated_ref, translated_refmut, translated_str};
 use crate::task::{
     add_task, current_task, current_user_token, exit_current_and_run_next,
     suspend_current_and_run_next, TaskStatus,
 };
-use crate::fs::{open_file, OpenFlags};
 use crate::timer::get_time_us;
+use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use crate::config::MAX_SYSCALL_NUM;
-use alloc::string::String;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -70,7 +70,6 @@ pub fn sys_exec(path: *const u8) -> isize {
         -1
     }
 }
-
 
 /// If there is not a child process whose pid is same as given, return -1.
 /// Else if there is a child process but it is still running, return -2.
@@ -142,7 +141,7 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
 
 //
 // YOUR JOB: 实现 sys_spawn 系统调用
-// ALERT: 注意在实现 SPAWN 时不需要复制父进程地址空间，SPAWN != FORK + EXEC 
+// ALERT: 注意在实现 SPAWN 时不需要复制父进程地址空间，SPAWN != FORK + EXEC
 pub fn sys_spawn(_path: *const u8) -> isize {
     -1
 }
