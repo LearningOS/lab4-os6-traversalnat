@@ -4,12 +4,12 @@ use crate::fs::open_file;
 use crate::fs::OpenFlags;
 use crate::fs::Stat;
 use crate::mm::translated_byte_buffer;
-use crate::mm::translated_refmut;
+
 use crate::mm::translated_str;
 use crate::mm::UserBuffer;
 use crate::task::current_task;
 use crate::task::current_user_token;
-use alloc::sync::Arc;
+
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
