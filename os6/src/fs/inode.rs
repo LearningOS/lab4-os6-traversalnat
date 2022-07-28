@@ -1,4 +1,4 @@
-use super::File;
+use super::{File, Stat, StatMode};
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
@@ -7,6 +7,7 @@ use alloc::vec::Vec;
 use bitflags::*;
 use easy_fs::{EasyFileSystem, Inode};
 use lazy_static::*;
+use alloc::string::String;
 
 /// A wrapper around a filesystem inode
 /// to implement File trait atop
@@ -45,6 +46,18 @@ impl OSInode {
             v.extend_from_slice(&buffer[..len]);
         }
         v
+    }
+
+    pub fn stat(&self) -> Stat {
+        let inner = self.inner.exclusive_access();
+        let stat = Stat {
+            dev: 0,
+            ino: 0,
+            mode: StatMode::NULL,
+            nlink: 1,
+            pad: [0; 7],
+        };
+        inner.inode.stat()
     }
 }
 
@@ -113,6 +126,14 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
             Arc::new(OSInode::new(readable, writable, inode))
         })
     }
+}
+
+pub fn link_at(old_name: String, new_name: String) -> isize {
+    ROOT_INODE.link_at(old_name, new_name)
+}
+
+pub fn unlink_at(name: String) -> isize {
+    ROOT_INODE.unlink_at(old_name, new_name)
 }
 
 impl File for OSInode {

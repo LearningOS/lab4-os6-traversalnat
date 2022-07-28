@@ -9,6 +9,7 @@ use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
+use crate::mm::MapPermission;
 use alloc::sync::Arc;
 use lazy_static::*;
 
@@ -35,6 +36,19 @@ impl Processor {
     }
     pub fn current(&self) -> Option<Arc<TaskControlBlock>> {
         self.current.as_ref().map(Arc::clone)
+    }
+    pub fn kmap(&self, start: usize, len: usize, flags: MapPermission) -> isize {
+        if let Some(current_task) = self.current() {
+            return current_task.inner_exclusive_access().memory_set.kmap(start, len, flags);
+        }
+        -1
+    }
+
+    pub fn kunmap(&self, start: usize, len: usize) -> isize {
+        if let Some(current_task) = self.current() {
+            return current_task.inner_exclusive_access().memory_set.kunmap(start, len);
+        }
+        -1
     }
 }
 
@@ -76,6 +90,14 @@ pub fn take_current_task() -> Option<Arc<TaskControlBlock>> {
 /// Get a copy of the current task
 pub fn current_task() -> Option<Arc<TaskControlBlock>> {
     PROCESSOR.exclusive_access().current()
+}
+
+pub fn kmap(start: usize, len: usize, flags: MapPermission) -> isize {
+    PROCESSOR.exclusive_access().kmap(start, len, flags)
+}
+
+pub fn kunmap(start: usize, len: usize) -> isize {
+    PROCESSOR.exclusive_access().kunmap(start, len)
 }
 
 /// Get token of the address space of current task

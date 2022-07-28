@@ -1,11 +1,11 @@
 //! Process management syscalls
 
-use crate::config::MAX_SYSCALL_NUM;
+use crate::config::{MAX_SYSCALL_NUM, PAGE_SIZE};
 use crate::fs::{open_file, OpenFlags};
-use crate::mm::{translated_refmut, translated_str};
+use crate::mm::{translated_refmut, translated_str, MapPermission};
 use crate::task::{
     add_task, current_task, current_user_token, exit_current_and_run_next,
-    suspend_current_and_run_next, TaskStatus,
+    suspend_current_and_run_next, TaskStatus,kmap, kunmap,
 };
 use crate::timer::get_time_us;
 
@@ -111,12 +111,14 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 // YOUR JOB: 引入虚地址后重写 sys_get_time
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     let _us = get_time_us();
-    // unsafe {
-    //     *ts = TimeVal {
-    //         sec: us / 1_000_000,
-    //         usec: us % 1_000_000,
-    //     };
-    // }
+    let re = TimeVal {
+        sec: _us / 1_000_000,
+        usec: _us % 1_000_000,
+    };
+    let ts =  translated_refmut(current_user_token(), _ts);
+    ts.sec = re.sec;
+    ts.usec = re.usec;
+
     0
 }
 
@@ -131,17 +133,33 @@ pub fn sys_set_priority(_prio: isize) -> isize {
 }
 
 // YOUR JOB: 扩展内核以实现 sys_mmap 和 sys_munmap
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    -1
+pub fn sys_mmap(_start: usize, _len: usize, _prot: usize) -> isize {
+    if _prot & !0x7 != 0 || _prot & 0x7 == 0 || _start % PAGE_SIZE != 0 {
+        return -1;
+    }
+
+    let flags = MapPermission::U | MapPermission::from_bits_truncate((_prot << 1) as u8);
+
+    kmap(_start, _len, flags)
 }
 
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    -1
+    kunmap(_start, _len)
 }
 
 //
 // YOUR JOB: 实现 sys_spawn 系统调用
 // ALERT: 注意在实现 SPAWN 时不需要复制父进程地址空间，SPAWN != FORK + EXEC
 pub fn sys_spawn(_path: *const u8) -> isize {
+    let path = translated_str(current_user_token(), _path);
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let data = app_inode.read_all();
+        let current_task = current_task().unwrap();
+        let new_task = current_task.spawn(&data);
+        let new_pid = new_task.pid.0;
+        add_task(new_task);
+        return new_pid as isize;
+    }
+
     -1
 }

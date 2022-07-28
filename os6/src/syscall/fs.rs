@@ -1,8 +1,8 @@
 //! File and filesystem-related syscalls
 
-use crate::fs::open_file;
-use crate::fs::OpenFlags;
-use crate::fs::Stat;
+use core::convert::{TryInto, TryFrom};
+
+use crate::fs::{open_file, OpenFlags, Stat, OSInode, link_at, unlink_at};
 use crate::mm::translated_byte_buffer;
 
 use crate::mm::translated_str;
@@ -73,14 +73,29 @@ pub fn sys_close(fd: usize) -> isize {
 }
 
 // YOUR JOB: 扩展 easy-fs 和内核以实现以下三个 syscall
-pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
+pub fn sys_fstat(fd: usize, st: *mut Stat) -> isize {
+    // let task = current_task().unwrap();
+    // let mut inner = task.inner_exclusive_access();
+    // if fd >= inner.fd_table.len() {
+    //     return -1;
+    // }
+    //
+    // if let Some(ft) = inner.fd_table[fd] {
+    //     if let Ok(inode) = OSInode::try_from(ft.clone()) {
+    //         inode.
+    //     }
+    // }
+
     -1
 }
 
 pub fn sys_linkat(_old_name: *const u8, _new_name: *const u8) -> isize {
-    -1
+    let old_name = translated_str(current_user_token(), _old_name);
+    let new_name = translated_str(current_user_token(), _new_name);
+    link_at(old_name, new_name)
 }
 
 pub fn sys_unlinkat(_name: *const u8) -> isize {
-    -1
+    let name = translated_str(current_user_token(), _name);
+    unlink_at(name)
 }

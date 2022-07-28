@@ -1,6 +1,6 @@
 use super::{
     block_cache_sync_all, get_block_cache, BlockDevice, DirEntry, DiskInode, DiskInodeType,
-    EasyFileSystem, DIRENT_SZ,
+    EasyFileSystem, DIRENT_SZ, Stat, StatMode,
 };
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -60,18 +60,40 @@ impl Inode {
         None
     }
     /// Find inode under current inode by name
+    fn find_inode(&self, name: &str) -> (Option<Arc<Inode>>, Option<u32>) {
+        let fs = self.fs.lock();
+        self.read_disk_inode(|disk_inode| {
+            if let Some(inode_id) = self.find_inode_id(name, disk_inode) {
+                let (block_id, block_offset) = fs.get_disk_inode_pos(inode_id);
+                (
+                    Some(Arc::new(Self::new(
+                        block_id,
+                        block_offset,
+                        self.fs.clone(),
+                        self.block_device.clone(),
+                    ))),
+                    Some(inode_id),
+                )
+            } else {
+                (None, None)
+            }
+        })
+    }
+    /// Find inode under current inode by name
     pub fn find(&self, name: &str) -> Option<Arc<Inode>> {
         let fs = self.fs.lock();
         self.read_disk_inode(|disk_inode| {
-            self.find_inode_id(name, disk_inode).map(|inode_id| {
+            if let Some(inode_id) = self.find_inode_id(name, disk_inode) {
                 let (block_id, block_offset) = fs.get_disk_inode_pos(inode_id);
-                Arc::new(Self::new(
+                Some(Arc::new(Self::new(
                     block_id,
                     block_offset,
                     self.fs.clone(),
                     self.block_device.clone(),
-                ))
-            })
+                )))
+            } else {
+                None
+            }
         })
     }
     /// Increase the size of a disk inode
@@ -185,5 +207,70 @@ impl Inode {
             }
         });
         block_cache_sync_all();
+    }
+    pub fn increase_link(&self) -> u32 {
+        self.modify_disk_inode(|disk_inode: &mut DiskInode| {
+            disk_inode.link += 1;
+            disk_inode.link
+        })
+    }
+    pub fn decrease_link(&self) -> u32 {
+        self.modify_disk_inode(|disk_inode: &mut DiskInode| {
+            disk_inode.link -= 1;
+            disk_inode.link
+        })
+    }
+    pub fn link_at(&self, old_name: String, new_name: String) -> isize {
+        if old_name == new_name {
+            return -1;
+        }
+
+        if let (Some(old_inode), Some(old_inode_id)) = self.find_inode(&old_name) {
+            let mut fs = self.fs.lock();
+            self.modify_disk_inode(|root_inode| {
+                let file_count = (root_inode.size as usize) / DIRENT_SZ;
+                let new_size = (file_count + 1) * DIRENT_SZ;
+                self.increase_size(new_size as u32, root_inode, &mut fs);
+                let dirent = DirEntry::new(&old_name, old_inode_id);
+                root_inode.write_at(
+                    file_count * DIRENT_SZ,
+                    dirent.as_bytes(),
+                    &self.block_device,
+                );
+            });
+            old_inode.increase_link();
+            block_cache_sync_all();
+            return 0;
+        }
+        -1
+    }
+
+    pub fn unlink_at(&self, name: String) -> isize {
+        if let (Some(inode), Some(inode_id)) = self.find_inode(&name) {
+            let link = inode.decrease_link();
+            if link == 0 {
+                // rm the file
+                inode.clear();
+                let file_count = (root_inode.size as usize) / DIRENT_SZ;
+                let mut dirent = DirEntry::new(&name, inode_id);
+                for i in 0..file_count {
+                    assert_eq!(
+                        self.read_at(DIRENT_SZ * i, dirent.as_bytes_mut()),
+                        DIRENT_SZ,
+                    );
+                    if dirent.name() == name {
+                        let new_dirent = DirEntry::new("", 0);
+                        self.write_at(i * DIRENT_SZ, dirent.as_bytes(), &self.block_device);
+                    }
+                }
+                block_cache_sync_all();
+            }
+            return 0;
+        }
+        -1
+    }
+
+    pub fn stat(&self) -> Stat {
+
     }
 }

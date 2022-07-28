@@ -40,6 +40,7 @@ pub fn kernel_token() -> usize {
 pub struct MemorySet {
     page_table: PageTable,
     areas: Vec<MapArea>,
+    data_frames: BTreeMap<VirtPageNum, FrameTracker>,
 }
 
 impl MemorySet {
@@ -47,6 +48,7 @@ impl MemorySet {
         Self {
             page_table: PageTable::new(),
             areas: Vec::new(),
+            data_frames: BTreeMap::new(),
         }
     }
     pub fn token(&self) -> usize {
@@ -268,6 +270,49 @@ impl MemorySet {
     pub fn recycle_data_pages(&mut self) {
         //*self = Self::new_bare();
         self.areas.clear();
+    }
+
+    pub fn kmap(&mut self, start: usize, len: usize, flags: MapPermission) -> isize {
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr::from(start + len).ceil();
+        let pte_flags = PTEFlags::from_bits_truncate(flags.bits) | PTEFlags::V;
+
+        if !start_va.aligned() {
+            println!("start address should aligned to page_size");
+            return -1;
+        }
+
+        for vpn in VPNRange::new(start_va.into(), end_va) {
+            if let Some(frame) = frame_alloc() {
+                if self.data_frames.contains_key(&vpn) {
+                    return -1;
+                }
+                let ppn = frame.ppn;
+                self.data_frames.insert(vpn, frame);
+                self.page_table.map(vpn, ppn, pte_flags);
+            } else {
+                return -1;
+            }
+        }
+        0
+    }
+
+    pub fn kunmap(&mut self, start: usize, len: usize) -> isize {
+        let start_va = VirtAddr::from(start);
+        let end_va = VirtAddr::from(start + len).ceil();
+
+        if !start_va.aligned() {
+            println!("start address should aligned to page_size");
+            return -1;
+        }
+
+        for vpn in VPNRange::new(start_va.into(), end_va) {
+            if let None = self.data_frames.remove(&vpn) {
+                return -1;
+            }
+            self.page_table.unmap(vpn);
+        }
+        0
     }
 }
 
