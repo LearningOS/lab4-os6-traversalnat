@@ -17,9 +17,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-
 use crate::fs::{open_file, OpenFlags};
-
 
 pub use crate::syscall::process::TaskInfo;
 
@@ -33,7 +31,8 @@ pub use context::TaskContext;
 pub use manager::add_task;
 pub use pid::{pid_alloc, KernelStack, PidHandle};
 pub use processor::{
-    current_task, current_trap_cx, current_user_token, run_tasks, schedule, take_current_task, kmap, kunmap,
+    current_task, current_trap_cx, current_user_token, kmap, kunmap, run_tasks, schedule,
+    take_current_task,
 };
 
 /// Make current task suspended and switch to the next task
@@ -68,6 +67,7 @@ pub fn exit_current_and_run_next(exit_code: i32) {
     // do not move to its parent but under initproc
 
     // ++++++ access initproc TCB exclusively
+    // if task.pid.0 != INITPROC.pid.0
     {
         let mut initproc_inner = INITPROC.inner_exclusive_access();
         for child in inner.children.iter() {

@@ -33,7 +33,7 @@ const SYSCALL_TASK_INFO: usize = 410;
 mod fs;
 pub mod process;
 
-use crate::fs::Stat;
+use easy_fs::Stat;
 use fs::*;
 use process::*;
 

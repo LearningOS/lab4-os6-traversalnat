@@ -1,9 +1,10 @@
 //! File and filesystem-related syscalls
-
 use core::convert::{TryInto, TryFrom};
 
-use crate::fs::{open_file, OpenFlags, Stat, OSInode, link_at, unlink_at};
-use crate::mm::translated_byte_buffer;
+use super::Stat; 
+
+use crate::fs::{open_file, OpenFlags, link_at, unlink_at};
+use crate::mm::{translated_byte_buffer, translated_refmut};
 
 use crate::mm::translated_str;
 use crate::mm::UserBuffer;
@@ -74,17 +75,18 @@ pub fn sys_close(fd: usize) -> isize {
 
 // YOUR JOB: 扩展 easy-fs 和内核以实现以下三个 syscall
 pub fn sys_fstat(fd: usize, st: *mut Stat) -> isize {
-    // let task = current_task().unwrap();
-    // let mut inner = task.inner_exclusive_access();
-    // if fd >= inner.fd_table.len() {
-    //     return -1;
-    // }
-    //
-    // if let Some(ft) = inner.fd_table[fd] {
-    //     if let Ok(inode) = OSInode::try_from(ft.clone()) {
-    //         inode.
-    //     }
-    // }
+    let stat = translated_refmut(current_user_token(), st);
+    let task = current_task().unwrap();
+    let mut inner = task.inner_exclusive_access();
+    if fd >= inner.fd_table.len() {
+        return -1;
+    }
+
+    if let Some(ft) = &inner.fd_table[fd] {
+        let inode_stat = ft.stat();
+        *stat = inode_stat.clone();
+        return 0;
+    }
 
     -1
 }
